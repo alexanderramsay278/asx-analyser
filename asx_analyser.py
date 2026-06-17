@@ -175,7 +175,7 @@ All risk scores are 1-10. Entry/stop/target must be realistic prices in AUD base
     print(f"  Analysing with Claude...")
 
     message = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-5-20250929",
         max_tokens=1000,
         messages=[{"role": "user", "content": prompt}]
     )
