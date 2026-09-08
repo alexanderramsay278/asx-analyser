@@ -21,10 +21,13 @@ pip install -r requirements.txt
 ```bash
 python asx_analyser.py CBA
 python asx_analyser.py CBA BHP NAB --portfolio 50000
+python report.py CPU XRO --portfolio 20000   # writes a standalone HTML report
 python -m pytest test_strategy.py -v
 python backtest.py               # reproduces every figure below;
                                  # writes backtest_trades.csv
 ```
+
+`report.py` writes a self-contained HTML file — inline CSS, no scripts, no external requests, light and dark — from the same signals the terminal produces.
 
 The optional `--commentary` flag adds qualitative context from the Anthropic API and requires `ANTHROPIC_API_KEY`. **It cannot change the signal, the levels, or the sizing.** Everything else runs offline apart from Yahoo Finance price data.
 
@@ -34,7 +37,8 @@ The optional `--commentary` flag adds qualitative context from the Anthropic API
 
 ```
 strategy.py        indicators + signal rules. Deterministic. No model calls.
-  ├── asx_analyser.py    live screen; optional LLM commentary layer
+  ├── asx_analyser.py    live screen (terminal); optional LLM commentary layer
+  ├── report.py          same signals rendered to a standalone HTML file
   ├── backtest.py        portfolio simulation over historical data
   └── test_strategy.py   15 tests, including a no-lookahead property test
 ```
