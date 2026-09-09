@@ -40,7 +40,12 @@ SLIPPAGE_BPS = 5.0
 
 # Measured gross edge per trade from the backtest, as a fraction of position
 # value. See README.md, section "Backtest Results".
-MEASURED_EDGE = 0.00213
+#
+# Quoted to two significant figures on purpose. Price data is fetched live and
+# Yahoo revises adjusted closes, so repeated runs land between 0.207% and 0.215%
+# with a trade count of 1,417-1,419. The finding is robust at this precision;
+# a third decimal place would not be.
+MEASURED_EDGE = 0.0021
 
 
 # -- Indicators ---------------------------------------------------------------

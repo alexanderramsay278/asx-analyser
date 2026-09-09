@@ -4,7 +4,7 @@ A Python tool that screens ASX-listed equities for mean-reversion swing setups, 
 
 Built independently as a first-year Commerce and Economics student.
 
-**The headline result is negative, and it is stated up front on purpose:** across 1,418 backtested trades the signal carries a real, out-of-sample-consistent edge of **+0.213% per trade**, and ASX retail transaction costs are roughly three times larger than that edge. The strategy is capital-gated, not idea-gated.
+**The headline result is negative, and it is stated up front on purpose:** across ~1,400 backtested trades the signal carries a real, out-of-sample-consistent edge of **+0.21% per trade**, and ASX retail transaction costs are roughly three times larger than that edge. The strategy is capital-gated, not idea-gated.
 
 ---
 
@@ -86,59 +86,64 @@ Most retail mean-reversion material targets US equities. Australia differs in wa
 
 ## Backtest results
 
-1,418 trades, 2012–2026, with **2021 onward held out** and never used for parameter selection.
+~1,400 trades, 2012–2026, with **2021 onward held out** and never used for parameter selection. Figures below are the run of **9 September 2026** — see *Reproducibility* below.
 
 **Method.** Signals computed on bar *t*'s close are filled at bar *t+1*'s **open**. Stops are the only intraday event, and a bar gapping below the stop fills at the open rather than the stop price. A bar touching both stop and target is assumed to have hit the **stop** first, since daily bars do not reveal intraday sequence. Brokerage is charged on both sides and slippage on every fill. Positions compete for four portfolio slots.
 
 | | In-sample (2012–2020) | Out-of-sample (2021–2026) |
 |---|---|---|
-| Trades | 880 | 538 |
-| Win rate | 46.6% | 48.5% |
-| Average win | +$53.88 | +$54.29 |
-| Average loss | −$74.10 | −$87.36 |
-| **Expectancy per trade** | **−$14.47** | **−$18.64** |
+| Trades | 879 | 538 |
+| Win rate | 46.4% | 48.3% |
+| Average win | +$52.27 | +$54.75 |
+| Average loss | −$72.98 | −$87.18 |
+| **Expectancy per trade** | **−$14.84** | **−$18.59** |
 | Average hold | 4.7 days | 4.7 days |
-| Total return | −63.69% | −50.24% |
-| CAGR | −10.65% | −11.78% |
-| Max drawdown | −66.30% | −51.36% |
-| Sharpe | −1.30 | −1.44 |
-| **Buy & hold STW.AX** | **+121.88%** (CAGR +9.27%) | **+66.49%** (CAGR +9.59%) |
+| CAGR | −11.08% | −11.73% |
+| Max drawdown | −67.63% | −51.22% |
+| Sharpe | −1.36 | −1.43 |
+| **Buy & hold STW.AX** | **CAGR +9.27%** | **CAGR +9.59%** |
 
 The strategy lost money outright and lost to buy-and-hold in both periods.
 
 ### Where the money went
 
-| Layer | Per trade (average position $3,517) |
+| Layer | Per trade (average position ~$3,500) |
 |---|---|
-| **Raw signal edge** | **+$7.48**  (+0.213% of position) |
-| − Slippage (10bps round trip) | −$3.52 |
+| **Raw signal edge** | **+$7.23**  (+0.21% of position) |
+| − Slippage (10bps round trip) | −$3.49 |
 | − Brokerage ($10 × 2 sides) | −$20.00 |
-| **Net expectancy** | **−$16.04** |
+| **Net expectancy** | **−$16.26** |
 
 **The signal works. The cost structure kills it.**
 
-Breakeven brokerage is **$1.99 per side**, which no Australian retail broker offers. Solving for position size instead — the edge is 0.213%, slippage takes 0.10%, leaving 0.113% to cover $20 of fixed brokerage:
+Breakeven brokerage is **under $2 per side**, which no Australian retail broker offers. Solving for position size instead — the edge is 0.21%, slippage takes 0.10%, leaving 0.11% to cover $20 of fixed brokerage:
 
 ```
-minimum viable position = $20 / 0.00113 ≈ $17,700
-at 4 concurrent slots   ≈ $70,800 portfolio floor
+minimum viable position = $20 / 0.0011 ≈ $18,000
+at 4 concurrent slots   ≈ $72,000 portfolio floor
 ```
 
 `asx_analyser.py` computes this live and prints a cost warning whenever your position sizing falls below it.
 
 ### Why a negative result is worth publishing
 
-The edge held out of sample. Win rate moved 46.6% → 48.5% and the per-trade edge was unchanged across 5.6 years the parameters were never fitted to. An overfit strategy collapses on unseen data; this one did not. That makes the diagnosis trustworthy: the edge is real, it is simply smaller than the cost of harvesting it.
+The edge held out of sample. Win rate moved 46.4% → 48.3% and the per-trade edge was unchanged across 5.6 years the parameters were never fitted to. An overfit strategy collapses on unseen data; this one did not. That makes the diagnosis trustworthy: the edge is real, it is simply smaller than the cost of harvesting it.
 
 It also makes the failure **structural rather than parametric**. Cost arithmetic does not move much when you nudge an RSI threshold, so the conclusion is far more robust than a return figure would have been.
 
 No parameters were adjusted after seeing the out-of-sample result.
 
+### Reproducibility
+
+Price data is fetched live, and Yahoo revises adjusted closes as dividends and corporate actions settle. Repeated runs therefore land between **0.207% and 0.215%** per-trade edge, on **1,417–1,419** trades, for a net of **−$15.95 to −$16.26**.
+
+Headline figures are quoted to two significant figures for that reason: the finding is robust at that precision, and a third decimal place would not be. `strategy.MEASURED_EDGE` — which drives the runtime cost warning — is set to `0.0021` on the same basis. Pinning a price-data snapshot so runs are bit-identical is on the roadmap.
+
 ---
 
 ## Open question
 
-The exit breakdown shows a badly asymmetric payoff: roughly 80% of trades are small wins, 11% are large losses. In-sample, 156 stop-outs cost −$23,149 against +$11,547 from 711 target exits. Gross P&L is dominated by stops.
+The exit breakdown shows a badly asymmetric payoff: roughly 80% of trades are small wins, 11% are large losses. In-sample, 157 stop-outs cost −$22,939 against +$11,018 from 709 target exits. Gross P&L is dominated by stops.
 
 A mean-reversion system enters *because* price has fallen. A tight volatility stop may therefore exit precisely the trades that were about to revert — which is why Connors' original research runs these systems without stops. That is a documented design question rather than a tuning knob, but it must be tested on the in-sample period only and reported alongside these results, not instead of them.
 

@@ -20,6 +20,8 @@ Run:  python backtest.py
 
 from __future__ import annotations
 
+import json
+
 import numpy as np
 import pandas as pd
 import yfinance as yf
@@ -170,7 +172,7 @@ def run_backtest(data: dict[str, pd.DataFrame], start: str, end: str):
     return pd.DataFrame(trades), pd.Series(dict(equity_curve)).sort_index()
 
 
-def report(label: str, trades: pd.DataFrame, equity: pd.Series, benchmark: pd.Series | None) -> None:
+def report(label: str, trades: pd.DataFrame, equity: pd.Series, benchmark: pd.Series | None) -> dict:
     print(f"\n{'=' * 62}\n{label}\n{'=' * 62}")
     if trades.empty or equity.empty:
         print("No trades generated.")
@@ -212,6 +214,25 @@ def report(label: str, trades: pd.DataFrame, equity: pd.Series, benchmark: pd.Se
     for reason, group in trades.groupby("reason"):
         print(f"  {reason:<8} {len(group):>4} trades   avg ${group['pnl'].mean():>8,.2f}")
 
+    stats = {
+        "trades": len(trades),
+        "win_rate": len(wins) / len(trades),
+        "avg_win": float(wins["pnl"].mean()) if len(wins) else 0.0,
+        "avg_loss": float(losses["pnl"].mean()) if len(losses) else 0.0,
+        "expectancy": float(trades["pnl"].mean()),
+        "avg_hold": float(trades["held_days"].mean()),
+        "cagr": float(cagr),
+        "max_dd": float(max_dd),
+        "sharpe": float(sharpe),
+        "start": f"{equity.index[0]:%Y}",
+        "end": f"{equity.index[-1]:%Y}",
+    }
+    if benchmark is not None and len(benchmark) > 1:
+        bench = benchmark.reindex(equity.index).ffill().dropna()
+        if len(bench) > 1:
+            stats["bench_cagr"] = float(100.0 * ((bench.iloc[-1] / bench.iloc[0]) ** (1 / years) - 1))
+    return stats
+
 
 def decompose(trades: pd.DataFrame) -> None:
     """Split net expectancy into signal edge versus transaction costs."""
@@ -244,15 +265,39 @@ def main() -> None:
         bench.index = bench.index.tz_localize(None)
 
     is_trades, is_equity = run_backtest(data, *IN_SAMPLE)
-    report("IN-SAMPLE  (parameters tuned here - treat with suspicion)", is_trades, is_equity, bench)
+    is_stats = report("IN-SAMPLE  (parameters tuned here - treat with suspicion)", is_trades, is_equity, bench)
 
     oos_trades, oos_equity = run_backtest(data, *OUT_SAMPLE)
-    report("OUT-OF-SAMPLE  (the honest number - reported as-is)", oos_trades, oos_equity, bench)
+    oos_stats = report("OUT-OF-SAMPLE  (the honest number - reported as-is)", oos_trades, oos_equity, bench)
 
     all_trades = pd.concat([is_trades, oos_trades], ignore_index=True)
     decompose(all_trades)
     all_trades.to_csv("backtest_trades.csv", index=False)
+
+    position = all_trades["shares"] * all_trades["entry_price"]
+    slippage = position * (2 * strategy.SLIPPAGE_BPS / 10_000.0)
+    raw_edge = all_trades["pnl"] + 2 * strategy.BROKERAGE_PER_SIDE + slippage
+    summary = {
+        "in_sample": is_stats,
+        "out_of_sample": oos_stats,
+        "total_trades": len(all_trades),
+        "avg_position": float(position.mean()),
+        "raw_edge": float(raw_edge.mean()),
+        "edge_pct": float(raw_edge.mean() / position.mean()),
+        "slippage": float(slippage.mean()),
+        "brokerage": 2 * strategy.BROKERAGE_PER_SIDE,
+        "net": float(all_trades["pnl"].mean()),
+        "breakeven": float(strategy.breakeven_position_size()),
+        "portfolio_floor": float(strategy.breakeven_position_size() * MAX_POSITIONS),
+        "slots": MAX_POSITIONS,
+        "universe": len(UNIVERSE),
+        "benchmark": BENCHMARK,
+    }
+    with open("backtest_summary.json", "w", encoding="utf-8") as fh:
+        json.dump(summary, fh, indent=2)
+
     print("\nTrade log written to backtest_trades.csv")
+    print("Summary written to backtest_summary.json")
 
     print("\nKNOWN BIASES (stated in README.md):")
     print("  - Survivorship: universe is today's large caps; delisted failures absent.")

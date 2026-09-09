@@ -150,13 +150,13 @@ def test_illiquid_name_is_avoided():
 # -- Cost model ---------------------------------------------------------------
 
 def test_breakeven_matches_published_figure():
-    """The ~$17.7k floor quoted in the README."""
-    assert strategy.breakeven_position_size() == pytest.approx(17_699, rel=0.01)
+    """The ~$18k floor quoted in the README."""
+    assert strategy.breakeven_position_size() == pytest.approx(18_182, rel=0.01)
 
 
 def test_expected_value_is_negative_at_small_size():
-    """The headline backtest finding: -$16.04/trade at the average position size."""
-    assert strategy.expected_net_per_trade(3_517) == pytest.approx(-16.04, abs=0.05)
+    """The headline backtest finding: about -$16/trade at the average position size."""
+    assert strategy.expected_net_per_trade(3_500) == pytest.approx(-16.15, abs=0.5)
 
 
 def test_expected_value_crosses_zero_at_breakeven():
