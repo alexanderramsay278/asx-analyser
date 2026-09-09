@@ -6,7 +6,7 @@ A Python tool that screens ASX-listed equities for mean-reversion swing setups, 
 
 Built independently as a first-year Commerce and Economics student.
 
-**The headline result is negative, and it is stated up front on purpose:** across ~1,400 backtested trades the signal carries a real, out-of-sample-consistent edge of **+0.21% per trade**, and ASX retail transaction costs are roughly three times larger than that edge. The strategy is capital-gated, not idea-gated.
+**The headline result is negative, and it is stated up front on purpose:** across 2,160 backtested trades the signal carries a real edge of **+0.25% per trade**, and ASX retail transaction costs are roughly three times larger than that edge. The strategy is capital-gated, not idea-gated.
 
 ---
 
@@ -88,41 +88,44 @@ Most retail mean-reversion material targets US equities. Australia differs in wa
 
 ## Backtest results
 
-~1,400 trades, 2012–2026, with **2021 onward held out** and never used for parameter selection. Figures below are the run of **9 September 2026** — see *Reproducibility* below.
+2,160 trades, 2012–2026, with **2021 onward held out** and never used for parameter selection. Figures are the run of **9 September 2026** — see *Reproducibility* below.
+
+![Equity curve, held-out period](equity_curve.svg)
+
+**Universe selection is mechanical, not discretionary.** 40 names are drawn from a candidate pool of current large-caps by a fixed rule — median daily turnover above $5m over the sample, ranked, capped at 40. The rule was set in advance and applied without exception, so the traded set is not hand-picked. Survivorship bias remains, because the candidate pool is *current* constituents.
 
 **Method.** Signals computed on bar *t*'s close are filled at bar *t+1*'s **open**. Stops are the only intraday event, and a bar gapping below the stop fills at the open rather than the stop price. A bar touching both stop and target is assumed to have hit the **stop** first, since daily bars do not reveal intraday sequence. Brokerage is charged on both sides and slippage on every fill. Positions compete for four portfolio slots.
 
 | | In-sample (2012–2020) | Out-of-sample (2021–2026) |
 |---|---|---|
-| Trades | 880 | 538 |
-| Win rate | 46.5% | 48.3% |
-| Average win | +$53.80 | +$54.76 |
-| Average loss | −$73.85 | −$87.16 |
-| **Expectancy per trade** | **−$14.52** | **−$18.58** |
-| Average hold | 4.7 days | 4.7 days |
-| CAGR | −10.71% | −11.72% |
-| Max drawdown | −66.48% | −51.19% |
-| Sharpe | −1.31 | −1.43 |
+| Trades | 1,324 | 836 |
+| Win rate | 44.0% | 40.7% |
+| Average win | +$59.17 | +$55.65 |
+| Average loss | −$69.66 | −$71.80 |
+| **Expectancy per trade** | **−$13.03** | **−$19.97** |
+| CAGR | −19.91% | −27.66% |
+| Max drawdown | −87.50% | −84.03% |
+| Sharpe | −1.77 | −2.44 |
 | **Buy & hold STW.AX** | **CAGR +9.27%** | **CAGR +9.59%** |
 
 The strategy lost money outright and lost to buy-and-hold in both periods.
 
 ### Where the money went
 
-| Layer | Per trade (average position $3,524) |
+| Layer | Per trade (average position $2,951) |
 |---|---|
-| **Raw signal edge** | **+$7.46**  (+0.21% of position) |
-| − Slippage (10bps round trip) | −$3.52 |
+| **Raw signal edge** | **+$7.24**  (+0.25% of position) |
+| − Slippage (10bps round trip) | −$2.95 |
 | − Brokerage ($10 × 2 sides) | −$20.00 |
-| **Net expectancy** | **−$16.06** |
+| **Net expectancy** | **−$15.71** |
 
 **The signal works. The cost structure kills it.**
 
-Breakeven brokerage is **under $2 per side**, which no Australian retail broker offers. Solving for position size instead — the edge is 0.21%, slippage takes 0.10%, leaving 0.11% to cover $20 of fixed brokerage:
+Breakeven brokerage is **under $2 per side**, which no Australian retail broker offers. Solving for position size instead — the edge is 0.24%, slippage takes 0.10%, leaving 0.14% to cover $20 of fixed brokerage:
 
 ```
-minimum viable position = $20 / 0.0011 ≈ $18,000
-at 4 concurrent slots   ≈ $72,000 portfolio floor
+minimum viable position = $20 / 0.0014 ≈ $14,300
+at 4 concurrent slots   ≈ $57,000 portfolio floor
 ```
 
 `asx_analyser.py` computes this live and prints a cost warning whenever your position sizing falls below it.
@@ -137,24 +140,35 @@ No parameters were adjusted after seeing the out-of-sample result.
 
 ### Reproducibility
 
-Price data is fetched live, and Yahoo revises adjusted closes as dividends and corporate actions settle. Repeated runs therefore land between **0.207% and 0.215%** per-trade edge, on **1,417–1,419** trades, for a net of **−$15.95 to −$16.26**.
+Price data is fetched live, and Yahoo revises adjusted closes as dividends and corporate actions settle. Repeated runs vary in the third decimal place of the edge and by a handful of trades.
 
-Headline figures are quoted to two significant figures for that reason: the finding is robust at that precision, and a third decimal place would not be. `strategy.MEASURED_EDGE` — which drives the runtime cost warning — is set to `0.0021` on the same basis. Pinning a price-data snapshot so runs are bit-identical is on the roadmap.
-
----
-
-## Open question
-
-The exit breakdown shows a badly asymmetric payoff: roughly 80% of trades are small wins, 11% are large losses. In-sample, 157 stop-outs cost −$22,939 against +$11,018 from 709 target exits. Gross P&L is dominated by stops.
-
-A mean-reversion system enters *because* price has fallen. A tight volatility stop may therefore exit precisely the trades that were about to revert — which is why Connors' original research runs these systems without stops. That is a documented design question rather than a tuning knob, but it must be tested on the in-sample period only and reported alongside these results, not instead of them.
+Headline figures are quoted to two significant figures for that reason: the finding is robust at that precision, and a third decimal place would not be. `strategy.MEASURED_EDGE` — which drives the runtime cost warning — is set to `0.0024` on the same basis. Pinning a price-data snapshot so runs are bit-identical is on the roadmap.
 
 ---
+
+## The stop was hurting, and testing it proved it
+
+The exit data showed gross P&L dominated by stop-outs. Since a mean-reversion system enters *because* price has fallen, a tight volatility stop may exit precisely the trades that were about to revert — which is why Connors' original work runs these systems without stops.
+
+Tested **on the in-sample period only**, and reported here alongside the headline rather than replacing it:
+
+| In-sample 2012–2020 | With 2× ATR stop | No stop |
+|---|---|---|
+| Trades | 1,324 | 1,156 |
+| Win rate | 44.0% | **52.8%** |
+| Expectancy per trade | −$13.03 | **−$2.78** |
+| Max drawdown | −87.5% | **−32.5%** |
+| Sharpe | −1.77 | **−0.10** |
+
+Removing the stop improved every measure, and cut drawdown by more than half. The hypothesis held: **the stop was destroying the strategy, not protecting it.**
+
+It still loses money. Expectancy improves from −$13.03 to −$2.78 per trade, which narrows the gap to breakeven without closing it — costs remain the binding constraint. That is the point: fixing the worst design decision in the strategy was not enough to overcome the cost structure.
+
+**This variant has not been run out of sample and is not the headline result.** Testing it there would spend the holdout, which is the one thing you cannot get back.
 
 ## Honest limitations
 
-- **Survivorship bias.** The universe is today's large caps; companies that delisted or collapsed are absent, which biases results upward.
-- **Universe is hand-picked** — 20 names, not a rules-based liquidity screen.
+- **Candidate pool is current constituents.** Universe selection within it is mechanical, but names that delisted or collapsed never enter the pool, which biases results upward.
 - **One parameter set.** No robustness surface has been mapped.
 - **Same-bar stop/target ambiguity** is resolved pessimistically. Conservative, but still a modelling assumption.
 - **No dividend timing, franking credits, or tax.**
@@ -169,9 +183,9 @@ A mean-reversion system enters *because* price has fallen. A tight volatility st
 - [x] Held-out out-of-sample period
 - [x] Deterministic signal layer, shared by the tool and the backtest
 - [x] Test suite including a no-lookahead property test
-- [ ] Test the no-stop variant against the asymmetric payoff above
+- [x] Test the no-stop variant against the asymmetric payoff *(done — see above)*
 - [ ] Walk-forward parameter validation
-- [ ] Rules-based universe screen (top 100 by liquidity) to remove hand-picking bias
+- [x] Rules-based universe screen to remove hand-picking bias *(done — median turnover rule)*
 - [ ] Multi-ticker batch screening across the ASX 200
 
 ---

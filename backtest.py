@@ -31,11 +31,21 @@ import strategy
 # -- Backtest configuration ---------------------------------------------------
 # Strategy parameters live in strategy.py. Only harness settings belong here.
 
-UNIVERSE = [
-    "BHP.AX", "CBA.AX", "CSL.AX", "NAB.AX", "WBC.AX", "ANZ.AX", "WES.AX",
-    "MQG.AX", "TLS.AX", "WOW.AX", "RIO.AX", "GMG.AX", "FMG.AX", "TCL.AX",
-    "STO.AX", "QBE.AX", "REA.AX", "COL.AX", "ALL.AX", "SUN.AX",
-]
+# Candidate pool: current ASX 100-ish constituents by market capitalisation.
+# The traded universe is NOT hand-picked from this list - it is selected by the
+# mechanical liquidity rule in select_universe() below. See README on the
+# survivorship bias this pool still carries.
+CANDIDATES = """
+BHP CBA CSL NAB WBC ANZ WES MQG TLS WOW RIO GMG FMG TCL STO QBE REA COL ALL SUN
+JHX ORG WDS AMC BXB S32 IAG ASX MPL CPU TWE SHL RMD COH XRO ALD APA AGL LLC SGP
+DXS VCX SCG NST EVN PLS IGO MIN LYC CAR SEK DMP JBH HVN WTC NAN PME BSL ORI AMP
+ASB CWY EDV MTS NHF NEC PDN QAN QUB RHC SDF SGR SUL TAH TPG VNT WHC ALQ ANN AZJ
+""".split()
+
+# Liquidity rule: a name enters the universe if its median daily turnover over
+# the sample exceeds this. Fixed in advance, applied mechanically, no discretion.
+MIN_MEDIAN_TURNOVER = 5_000_000.0   # AUD/day
+MAX_UNIVERSE = 40                   # cap, ranked by turnover, for tractability
 
 BENCHMARK = "STW.AX"                        # SPDR ASX 200 ETF: the do-nothing option
 IN_SAMPLE = ("2012-01-01", "2020-12-31")    # parameters tuned here
@@ -45,29 +55,53 @@ STARTING_EQUITY = 20_000.0
 MAX_POSITIONS = 4
 
 
-def load_prices(tickers: list[str], start: str, end: str) -> dict[str, pd.DataFrame]:
+def select_universe(raw, candidates: list[str]) -> list[str]:
+    """Apply the liquidity rule. No discretion: the rule decides, not the author."""
+    scored = []
+    for ticker in candidates:
+        try:
+            df = raw[f"{ticker}.AX"].dropna(subset=["Close", "Volume"])
+        except KeyError:
+            continue
+        if len(df) < strategy.TREND_MA + 50:
+            continue
+        turnover = float((df["Close"] * df["Volume"]).median())
+        if turnover >= MIN_MEDIAN_TURNOVER:
+            scored.append((turnover, ticker))
+    scored.sort(reverse=True)
+    kept = [t for _, t in scored[:MAX_UNIVERSE]]
+    print(f"  universe: {len(kept)} of {len(candidates)} candidates cleared "
+          f"${MIN_MEDIAN_TURNOVER:,.0f}/day median turnover")
+    return kept
+
+
+def download(tickers: list[str], start: str, end: str):
     """Download with a buffer so indicators are warm on day one of the test."""
     buffered = (pd.Timestamp(start) - pd.Timedelta(days=400)).strftime("%Y-%m-%d")
-    raw = yf.download(tickers, start=buffered, end=end, auto_adjust=True,
-                      progress=False, group_by="ticker", threads=True)
+    return yf.download([f"{t}.AX" for t in tickers], start=buffered, end=end,
+                       auto_adjust=True, progress=False, group_by="ticker", threads=True)
 
+
+def build(raw, tickers: list[str]) -> dict[str, pd.DataFrame]:
+    """Attach features to the selected universe."""
     data: dict[str, pd.DataFrame] = {}
-    for ticker in tickers:
+    for name in tickers:
+        ticker = f"{name}.AX"
         try:
             df = raw[ticker] if isinstance(raw.columns, pd.MultiIndex) else raw
         except KeyError:
             continue
         df = df.dropna(subset=["Open", "High", "Low", "Close"])
         if len(df) < strategy.TREND_MA + 50:
-            print(f"  skipped {ticker}: insufficient history")
             continue
         if getattr(df.index, "tz", None) is not None:
             df = df.tz_localize(None)
-        data[ticker] = strategy.build_features(df)
+        data[name] = strategy.build_features(df)
     return data
 
 
-def run_backtest(data: dict[str, pd.DataFrame], start: str, end: str):
+def run_backtest(data: dict[str, pd.DataFrame], start: str, end: str,
+                 use_stop: bool = True):
     start_ts, end_ts = pd.Timestamp(start), pd.Timestamp(end)
     all_dates = sorted({d for df in data.values() for d in df.index})
     dates = [d for d in all_dates if start_ts <= d <= end_ts]
@@ -96,7 +130,7 @@ def run_backtest(data: dict[str, pd.DataFrame], start: str, end: str):
                 exit_price = bar["Open"] * (1 - slip)      # signalled yesterday
                 reason = pos["pending_reason"]
                 pending_exits.discard(ticker)
-            elif bar["Low"] <= pos["stop"]:
+            elif use_stop and bar["Low"] <= pos["stop"]:
                 fill = min(bar["Open"], pos["stop"])       # gap fills at the open
                 exit_price = fill * (1 - slip)
                 reason = "stop"
@@ -253,8 +287,10 @@ def decompose(trades: pd.DataFrame) -> None:
 
 
 def main() -> None:
-    print("Downloading price data...")
-    data = load_prices(UNIVERSE, IN_SAMPLE[0], OUT_SAMPLE[1])
+    print(f"Downloading {len(CANDIDATES)} candidates...")
+    raw = download(CANDIDATES, IN_SAMPLE[0], OUT_SAMPLE[1])
+    universe = select_universe(raw, CANDIDATES)
+    data = build(raw, universe)
     print(f"Loaded {len(data)} tickers.")
 
     bench = yf.download(BENCHMARK, start=IN_SAMPLE[0], end=OUT_SAMPLE[1],
@@ -269,6 +305,16 @@ def main() -> None:
 
     oos_trades, oos_equity = run_backtest(data, *OUT_SAMPLE)
     oos_stats = report("OUT-OF-SAMPLE  (the honest number - reported as-is)", oos_trades, oos_equity, bench)
+
+    # Variant test, in-sample only. The exit data says stops dominate gross P&L,
+    # and Connors' original work runs these systems without them. Reported
+    # alongside the headline result, never instead of it.
+    ns_trades, ns_equity = run_backtest(data, *IN_SAMPLE, use_stop=False)
+    ns_stats = report("VARIANT: NO STOP  (in-sample only - never fitted out of sample)",
+                      ns_trades, ns_equity, bench)
+    print(f"\n  vs stopped in-sample: expectancy "
+          f"${is_stats['expectancy']:,.2f} -> ${ns_stats['expectancy']:,.2f}, "
+          f"max drawdown {is_stats['max_dd']:.1f}% -> {ns_stats['max_dd']:.1f}%")
 
     all_trades = pd.concat([is_trades, oos_trades], ignore_index=True)
     decompose(all_trades)
@@ -290,9 +336,13 @@ def main() -> None:
         "breakeven": float(strategy.breakeven_position_size()),
         "portfolio_floor": float(strategy.breakeven_position_size() * MAX_POSITIONS),
         "slots": MAX_POSITIONS,
-        "universe": len(UNIVERSE),
+        "no_stop_in_sample": ns_stats,
+        "universe": len(data),
         "benchmark": BENCHMARK,
     }
+    pd.DataFrame({"strategy": pd.concat([is_equity, oos_equity]),
+                  "benchmark": bench}).to_csv("backtest_equity.csv")
+
     with open("backtest_summary.json", "w", encoding="utf-8") as fh:
         json.dump(summary, fh, indent=2)
 
@@ -301,7 +351,7 @@ def main() -> None:
 
     print("\nKNOWN BIASES (stated in README.md):")
     print("  - Survivorship: universe is today's large caps; delisted failures absent.")
-    print("  - Universe selection: 20 hand-picked names, not a rules-based screen.")
+    print(f"  - Universe: rules-selected on median turnover, but from a current-constituent pool.")
     print("  - Same-bar stop/target ambiguity resolved pessimistically.")
     print("  - No dividend timing, franking credits, or tax modelled.")
 

@@ -32,3 +32,4 @@ notes.md
 backtest_trades.csv
 report.html
 backtest_summary.json
+backtest_equity.csv
