@@ -1,5 +1,7 @@
 # ASX Mean-Reversion Analyser
 
+[![tests](https://github.com/alexanderramsay278/asx-analyser/actions/workflows/tests.yml/badge.svg)](https://github.com/alexanderramsay278/asx-analyser/actions/workflows/tests.yml)
+
 A Python tool that screens ASX-listed equities for mean-reversion swing setups, returns a `BUY / WAIT / AVOID` signal with stop, target and risk-based sizing, and — because the strategy was backtested — tells you when your account is too small for the signal to be worth trading.
 
 Built independently as a first-year Commerce and Economics student.
