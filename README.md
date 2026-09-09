@@ -92,27 +92,27 @@ Most retail mean-reversion material targets US equities. Australia differs in wa
 
 | | In-sample (2012–2020) | Out-of-sample (2021–2026) |
 |---|---|---|
-| Trades | 879 | 538 |
-| Win rate | 46.4% | 48.3% |
-| Average win | +$52.27 | +$54.75 |
-| Average loss | −$72.98 | −$87.18 |
-| **Expectancy per trade** | **−$14.84** | **−$18.59** |
+| Trades | 880 | 538 |
+| Win rate | 46.5% | 48.3% |
+| Average win | +$53.80 | +$54.76 |
+| Average loss | −$73.85 | −$87.16 |
+| **Expectancy per trade** | **−$14.52** | **−$18.58** |
 | Average hold | 4.7 days | 4.7 days |
-| CAGR | −11.08% | −11.73% |
-| Max drawdown | −67.63% | −51.22% |
-| Sharpe | −1.36 | −1.43 |
+| CAGR | −10.71% | −11.72% |
+| Max drawdown | −66.48% | −51.19% |
+| Sharpe | −1.31 | −1.43 |
 | **Buy & hold STW.AX** | **CAGR +9.27%** | **CAGR +9.59%** |
 
 The strategy lost money outright and lost to buy-and-hold in both periods.
 
 ### Where the money went
 
-| Layer | Per trade (average position ~$3,500) |
+| Layer | Per trade (average position $3,524) |
 |---|---|
-| **Raw signal edge** | **+$7.23**  (+0.21% of position) |
-| − Slippage (10bps round trip) | −$3.49 |
+| **Raw signal edge** | **+$7.46**  (+0.21% of position) |
+| − Slippage (10bps round trip) | −$3.52 |
 | − Brokerage ($10 × 2 sides) | −$20.00 |
-| **Net expectancy** | **−$16.26** |
+| **Net expectancy** | **−$16.06** |
 
 **The signal works. The cost structure kills it.**
 

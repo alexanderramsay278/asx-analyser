@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import html
+import json
 import sys
 import webbrowser
 from datetime import datetime
@@ -142,6 +143,26 @@ header.page p { margin: 0; color: var(--ink-2); font-size: 13.5px; }
 .callout .head .icon { font-size: 13px; }
 .callout p { margin: 0; font-size: 13.5px; color: var(--ink-2); }
 .callout b { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+/* backtest card */
+.cmp { margin: 4px 0 26px; }
+.cmp-row { display: grid; grid-template-columns: 132px 1fr 96px; align-items: center; gap: 12px; margin-bottom: 9px; }
+.cmp-row .k { font-size: 12.5px; color: var(--ink-2); }
+.cmp-row .track2 { height: 16px; background: var(--neutral); border-radius: 3px; overflow: hidden; }
+.cmp-row .fill { height: 100%; border-radius: 3px; }
+.cmp-row .fill.edge { background: var(--up); }
+.cmp-row .fill.cost { background: var(--down); }
+.cmp-row .v { font-size: 13.5px; font-weight: 640; text-align: right; font-variant-numeric: tabular-nums; }
+.cmp-net { display: flex; align-items: baseline; gap: 10px; padding-top: 12px; border-top: 1px solid var(--hairline); }
+.cmp-net .k { font-size: 12.5px; color: var(--ink-2); }
+.cmp-net .v { font-size: 22px; font-weight: 650; letter-spacing: -0.01em; }
+
+table.res { width: 100%; border-collapse: collapse; margin-bottom: 6px; font-variant-numeric: tabular-nums; }
+table.res th, table.res td { text-align: right; padding: 7px 10px; font-size: 13px; border-bottom: 1px solid var(--hairline); }
+table.res th:first-child, table.res td:first-child { text-align: left; color: var(--ink-2); font-weight: 400; }
+table.res thead th { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 640; }
+table.res tr.key td { font-weight: 650; }
+table.res tr:last-child td { border-bottom: none; }
 
 footer.page { color: var(--muted); font-size: 12px; margin-top: 26px; line-height: 1.6; }
 footer.page code { font-size: 11.5px; }
@@ -281,8 +302,86 @@ def render_card(sig: strategy.Signal, sizing: dict, portfolio: float) -> str:
     return "".join(parts)
 
 
-def build(signals: list[tuple[strategy.Signal, dict]], portfolio: float) -> str:
-    cards = "".join(render_card(sig, sizing, portfolio) for sig, sizing in signals)
+def backtest_card(d: dict) -> str:
+    """The evidence card: what the edge is, and what costs do to it."""
+    isd, oos = d["in_sample"], d["out_of_sample"]
+    edge, slip, brok = d["raw_edge"], d["slippage"], d["brokerage"]
+    costs = slip + brok
+    scale = max(edge, costs)
+
+    def row(label: str, value: float, kind: str, note: str = "") -> str:
+        pct = 100.0 * value / scale if scale else 0
+        return (f'<div class="cmp-row"><span class="k">{label}</span>'
+                f'<div class="track2"><div class="fill {kind}" style="width:{pct:.1f}%"></div></div>'
+                f'<span class="v">{money(value)}</span></div>')
+
+    def cell(a, b, label, fmt, key=False):
+        return (f'<tr{" class='key'" if key else ""}><td>{label}</td>'
+                f"<td>{fmt(a)}</td><td>{fmt(b)}</td></tr>")
+
+    def sign(txt: str) -> str:
+        return txt.replace("-", "−")
+
+    pc = lambda v: f"{v:.1%}"
+    dl = lambda v: money(v)
+    n1 = lambda v: f"{v:,.0f}"
+    p2 = lambda v: sign(f"{v:+.2f}%")
+    s2 = lambda v: sign(f"{v:.2f}")
+
+    rows = "".join([
+        cell(isd["trades"], oos["trades"], "Trades", n1),
+        cell(isd["win_rate"], oos["win_rate"], "Win rate", pc),
+        cell(isd["avg_win"], oos["avg_win"], "Average win", dl),
+        cell(isd["avg_loss"], oos["avg_loss"], "Average loss", dl),
+        cell(isd["expectancy"], oos["expectancy"], "Expectancy / trade", dl, key=True),
+        cell(isd["cagr"], oos["cagr"], "CAGR", p2),
+        cell(isd["max_dd"], oos["max_dd"], "Max drawdown", p2),
+        cell(isd["sharpe"], oos["sharpe"], "Sharpe", s2),
+        cell(isd.get("bench_cagr", 0), oos.get("bench_cagr", 0),
+             f"Buy &amp; hold {d['benchmark']} — CAGR", p2, key=True),
+    ])
+
+    return f"""<section class="card">
+      <div class="card-head">
+        <span class="ticker">Backtest</span>
+        <span class="price">{d['total_trades']:,} trades · {isd['start']}–{oos['end']} ·
+          {d['universe']} ASX names</span>
+      </div>
+      <p class="reason">Signals filled at the next bar's open, ASX brokerage and slippage on every
+        fill, {d['slots']} concurrent position slots. {oos['start']} onward held out and never used
+        for parameter selection.</p>
+
+      <p class="section-label">Where the money went — per trade, average position {money(d['avg_position'])}</p>
+      <div class="cmp">
+        {row("Raw signal edge", edge, "edge")}
+        {row("Slippage", slip, "cost")}
+        {row("Brokerage", brok, "cost")}
+        <div class="cmp-net"><span class="k">Net expectancy</span>
+          <span class="v">{money(d['net'])}</span>
+          <span class="k">· edge is {edge / costs:.2f}× costs</span></div>
+      </div>
+
+      <p class="section-label">In-sample vs held-out</p>
+      <table class="res">
+        <thead><tr><th></th><th>In-sample {isd['start']}–{isd['end']}</th>
+          <th>Held out {oos['start']}–{oos['end']}</th></tr></thead>
+        <tbody>{rows}</tbody>
+      </table>
+
+      <div class="callout"><div class="head"><span class="icon">⚠</span>
+        <span>The finding</span></div><p>The edge is real and survived the holdout — the win rate
+        barely moved. It is simply smaller than the cost of harvesting it. Positions must exceed
+        <b>{money(d['breakeven'])}</b>, or roughly a <b>{money(d['portfolio_floor'])}</b> portfolio,
+        before the strategy profits at all. Capital-gated, not idea-gated.</p></div>
+    </section>"""
+
+
+def build(signals: list[tuple[strategy.Signal, dict]], portfolio: float,
+          subtitle: str | None = None) -> str:
+    cards = "".join(render_card(sig, sizing, portfolio) for sig, sizing in signals) or "{{CARDS}}"
+    default_subtitle = (f"Deterministic signals from <code>strategy.py</code> · position sizing at "
+                        f"{RISK_PER_TRADE:.0%} portfolio risk on {money(portfolio)} · "
+                        f"generated {datetime.now():%d %b %Y}")
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -291,9 +390,7 @@ def build(signals: list[tuple[strategy.Signal, dict]], portfolio: float) -> str:
 <body><div class="wrap">
 <header class="page">
   <h1>ASX Mean-Reversion Screen</h1>
-  <p>Deterministic signals from <code>strategy.py</code> · position sizing at
-     {RISK_PER_TRADE:.0%} portfolio risk on {money(portfolio)} ·
-     generated {datetime.now():%d %b %Y}</p>
+  <p>{subtitle or default_subtitle}</p>
 </header>
 {cards}
 <footer class="page">
@@ -307,11 +404,30 @@ def build(signals: list[tuple[strategy.Signal, dict]], portfolio: float) -> str:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Render ASX signals to a standalone HTML report.")
-    ap.add_argument("tickers", nargs="+", help="ASX codes, e.g. CPU XRO BHP")
+    ap.add_argument("tickers", nargs="*", help="ASX codes, e.g. CPU XRO BHP")
     ap.add_argument("--portfolio", type=float, default=20_000.0)
     ap.add_argument("--out", default="report.html")
     ap.add_argument("--no-open", action="store_true", help="do not open the file in a browser")
+    ap.add_argument("--backtest", action="store_true",
+                    help="render the backtest summary instead (needs backtest_summary.json)")
     args = ap.parse_args()
+
+    if args.backtest:
+        summary_path = Path("backtest_summary.json")
+        if not summary_path.exists():
+            print("backtest_summary.json not found — run `python backtest.py` first.")
+            return 1
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        doc = build([], args.portfolio, subtitle=(
+            "Backtest of the deterministic strategy in <code>strategy.py</code> — the same code "
+            f"path the live screen runs · generated {datetime.now():%d %b %Y}"
+        )).replace("{{CARDS}}", backtest_card(summary))
+        path = Path(args.out).resolve()
+        path.write_text(doc, encoding="utf-8")
+        print(f"  wrote {path}")
+        if not args.no_open:
+            webbrowser.open(path.as_uri())
+        return 0
 
     results = []
     for ticker in args.tickers:
