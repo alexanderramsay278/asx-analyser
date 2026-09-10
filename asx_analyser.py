@@ -182,7 +182,7 @@ def render(sig: strategy.Signal, sizing: dict, note: str | None) -> None:
             print(wrap(
                 f"At this position size the measured edge does not cover costs. "
                 f"Expected value is {RED}${net:,.2f} per trade{RESET}. Backtesting over "
-                f"~1,400 trades put the gross edge at {strategy.MEASURED_EDGE:.2%} of position "
+                f"~2,200 trades put the gross edge at {strategy.MEASURED_EDGE:.2%} of position "
                 f"value, against ${2 * strategy.BROKERAGE_PER_SIDE:.0f} brokerage plus slippage. "
                 f"Positions need to exceed ${sizing['breakeven_size']:,.0f} before this "
                 f"strategy is profitable at all."))
