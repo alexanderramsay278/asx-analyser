@@ -306,6 +306,9 @@ def backtest_card(d: dict) -> str:
     """The evidence card: what the edge is, and what costs do to it."""
     isd, oos = d["in_sample"], d["out_of_sample"]
     edge, slip, brok = d["raw_edge"], d["slippage"], d["brokerage"]
+    # Computed from the live constant, not the stored run, so the card can never
+    # disagree with the warning the tool prints.
+    breakeven = strategy.breakeven_position_size()
     costs = slip + brok
     scale = max(edge, costs)
 
@@ -369,10 +372,10 @@ def backtest_card(d: dict) -> str:
       </table>
 
       <div class="callout"><div class="head"><span class="icon">⚠</span>
-        <span>The finding</span></div><p>The edge is real and survived the holdout — the win rate
-        barely moved. It is simply smaller than the cost of harvesting it. Positions must exceed
-        <b>{money(d['breakeven'])}</b>, or roughly a <b>{money(d['portfolio_floor'])}</b> portfolio,
-        before the strategy profits at all. Capital-gated, not idea-gated.</p></div>
+        <span>The finding</span></div><p>The edge is real and survived the holdout. It is simply
+        smaller than the cost of harvesting it. Positions must exceed <b>{money(breakeven)}</b>, or
+        roughly a <b>{money(breakeven * d['slots'])}</b> portfolio, before the strategy profits at
+        all. Capital-gated, not idea-gated.</p></div>
     </section>"""
 
 
